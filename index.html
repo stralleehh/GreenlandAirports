@@ -144,8 +144,9 @@ document.getElementById("clear-all").addEventListener("click", () => {
 });
 
 // Add marker on click
-map.on("click", e => addMarker(e.latlng.lat, e.latlng.lng));
-
+map.on("click", function (e) {
+  addMarker(e.latlng.lat, e.latlng.lng, "", "", ""); // Ensure empty strings for missing values
+});
 </script>
 </body>
 </html>
