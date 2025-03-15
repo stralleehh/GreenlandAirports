@@ -14,6 +14,13 @@
     .status { font-weight: bold; margin-top: 5px; }
     form { margin: 0; }
     label { display: block; margin-top: 5px; }
+    .marker-label {
+      font-weight: bold;
+      background: white;
+      padding: 2px 5px;
+      border-radius: 5px;
+      font-size: 12px;
+    }
     #clear-all { position: absolute; top: 10px; right: 10px; z-index: 1000; background: #ff4444; color: white; padding: 10px; border: none; cursor: pointer; }
   </style>
 </head>
@@ -58,8 +65,15 @@ savedMarkers.forEach(markerData => {
 });
 
 // Function to add a marker with a popup form
-function addMarker(lat, lng, name = "", icao = "", navaid = "") {
+function addMarker(lat, lng, name = "", icao = "") {
   const marker = L.marker([lat, lng], { draggable: true }).addTo(map);
+  
+  // Display airport name above marker
+  marker.bindTooltip(name || "Unnamed Airport", {
+    permanent: true,
+    direction: "top",
+    className: "marker-label"
+  }).openTooltip();
 
   // Determine status based on the ICAO code and its correct location
   let statusMessage = "";
@@ -78,8 +92,6 @@ function addMarker(lat, lng, name = "", icao = "", navaid = "") {
       <input type="text" class="popup-input name" value="${name}" />
       <label>ICAO Code:</label>
       <input type="text" class="popup-input icao" value="${icao}" oninput="updateAccuracy(${lat}, ${lng}, this.value, this.closest('form'))" />
-      <label>NAVAID Info:</label>
-      <input type="text" class="popup-input navaid" value="${navaid}" />
       <div id="accuracy-${lat}-${lng}">${statusMessage}</div>
       <button type="submit" class="btn">Submit</button>
       <button type="button" class="btn" onclick="removeMarker(${lat}, ${lng})">Remove</button>
