@@ -29,15 +29,13 @@
 <button id="clear-all">Clear All Markers</button>
 
 <script>
-// Initialize the map centered on Greenland
+// Initialize the map
 const map = L.map('map').setView([72, -40], 4);
-
-// Load OpenStreetMap tiles
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
   attribution: '&copy; OpenStreetMap contributors'
 }).addTo(map);
 
-// Correct airport locations (ICAO, latitude, longitude)
+// Airport database with correct locations
 const airportDatabase = {
   "BGSF": { lat: 67.012, lng: -50.719 },
   "BGGH": { lat: 64.190, lng: -51.678 },
@@ -57,74 +55,66 @@ const airportDatabase = {
   "CYLT": { lat: 82.5178, lng: -62.2813 }
 };
 
-// Load saved markers from local storage
-let savedMarkers = JSON.parse(localStorage.getItem("greenlandMarkers")) || [];
-savedMarkers.forEach(markerData => {
-  addMarker(markerData.lat, markerData.lng, markerData.name, markerData.icao, markerData.navaid);
-});
+// Load existing markers
+let markers = JSON.parse(localStorage.getItem("greenlandMarkers")) || [];
+markers.forEach(marker => addMarker(marker.lat, marker.lng, marker.name, marker.icao, marker.navaid));
 
-// Function to add a marker with a popup form
+// Function to add markers
 function addMarker(lat, lng, name = "", icao = "", navaid = "") {
   const marker = L.marker([lat, lng], { draggable: true }).addTo(map);
 
-  let distanceNM = icao && airportDatabase[icao] ? 
-      calculateDistance(lat, lng, airportDatabase[icao].lat, airportDatabase[icao].lng) : 
-      null;
+  function getDistanceMessage() {
+    if (icao && airportDatabase[icao]) {
+      const correctLocation = airportDatabase[icao];
+      const distanceNM = calculateDistance(lat, lng, correctLocation.lat, correctLocation.lng);
+      return distanceNM <= 20 ? 
+        `<span style="color:green;">✅ ${distanceNM.toFixed(1)} NM</span>` : 
+        `<span style="color:red;">❌ ${distanceNM.toFixed(1)} NM</span>`;
+    }
+    return `<span style="color:gray;">Unknown ICAO</span>`;
+  }
 
-  let statusMessage = distanceNM !== null ? 
-      (distanceNM <= 20 ? `<span style="color:green;">✅ ${distanceNM.toFixed(1)} NM</span>` : 
-      `<span style="color:red;">❌ ${distanceNM.toFixed(1)} NM</span>`) : 
-      `<span style="color:gray;">Unknown ICAO</span>`;
+  function updatePopup() {
+    marker.getPopup().setContent(`
+      <form onsubmit="handleSubmit(event, ${lat}, ${lng})">
+        <label>Airport Name:</label>
+        <input type="text" class="popup-input name" value="${name}" />
+        <label>ICAO Code:</label>
+        <input type="text" class="popup-input icao" value="${icao}" oninput="updateList()" />
+        <label>NAVAID Info:</label>
+        <input type="text" class="popup-input navaid" value="${navaid}" />
+        <div>${getDistanceMessage()}</div>
+        <button type="submit" class="btn">Submit</button>
+        <button type="button" class="btn" onclick="removeMarker(${lat}, ${lng})">Remove</button>
+      </form>
+    `);
+  }
 
-  const formHTML = `
-    <form onsubmit="handleSubmit(event, ${lat}, ${lng})">
-      <label>Airport Name:</label>
-      <input type="text" class="popup-input name" value="${name}" />
-      <label>ICAO Code:</label>
-      <input type="text" class="popup-input icao" value="${icao}" oninput="updateAccuracy(${lat}, ${lng}, this.value, this.closest('form'))" />
-      <label>NAVAID Info:</label>
-      <input type="text" class="popup-input navaid" value="${navaid}" />
-      <div id="accuracy-${lat}-${lng}">${statusMessage}</div>
-      <button type="submit" class="btn">Submit</button>
-      <button type="button" class="btn" onclick="removeMarker(${lat}, ${lng})">Remove</button>
-    </form>
-  `;
+  marker.bindPopup("").openPopup();
+  updatePopup();
 
-  marker.bindPopup(formHTML).openPopup();
   marker.on("dragend", function () {
+    const newPos = marker.getLatLng();
+    marker.setLatLng(newPos);
+    updatePopup();
     updateList();
   });
 
   updateList();
 }
 
-// Update accuracy message and list
-function updateAccuracy(lat, lng, icao, formElement) {
-  const accuracyDiv = formElement.querySelector(`#accuracy-${lat}-${lng}`);
-  if (airportDatabase[icao]) {
-    const correctLocation = airportDatabase[icao];
-    const distanceNM = calculateDistance(lat, lng, correctLocation.lat, correctLocation.lng);
-    accuracyDiv.innerHTML = distanceNM <= 20 ? 
-      `<span style="color:green;">✅ ${distanceNM.toFixed(1)} NM</span>` : 
-      `<span style="color:red;">❌ ${distanceNM.toFixed(1)} NM</span>`;
-  } else {
-    accuracyDiv.innerHTML = `<span style="color:gray;">Unknown ICAO</span>`;
-  }
-  updateList();
-}
-
-// Haversine formula to calculate distance in nautical miles
+// Calculate distance in NM
 function calculateDistance(lat1, lon1, lat2, lon2) {
-  const R = 3440.1;
+  const R = 3440.1; // Nautical miles
   const toRad = deg => deg * (Math.PI / 180);
   const dLat = toRad(lat2 - lat1);
   const dLon = toRad(lon2 - lon1);
-  const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return R * c;
+  const a = Math.sin(dLat / 2) ** 2 +
+            Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+  return 2 * R * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-// Save and update markers list
+// Update the airport list
 function updateList() {
   let markers = JSON.parse(localStorage.getItem("greenlandMarkers")) || [];
   const list = document.getElementById("airport-items");
@@ -136,11 +126,36 @@ function updateList() {
   });
 }
 
+// Handle form submission
+function handleSubmit(event, lat, lng) {
+  event.preventDefault();
+  const form = event.target;
+  const name = form.querySelector(".name").value;
+  const icao = form.querySelector(".icao").value;
+  const navaid = form.querySelector(".navaid").value;
+
+  markers = markers.filter(m => m.lat !== lat || m.lng !== lng);
+  markers.push({ lat, lng, name, icao, navaid });
+  localStorage.setItem("greenlandMarkers", JSON.stringify(markers));
+
+  updateList();
+}
+
+// Remove marker
+function removeMarker(lat, lng) {
+  markers = markers.filter(m => m.lat !== lat || m.lng !== lng);
+  localStorage.setItem("greenlandMarkers", JSON.stringify(markers));
+  location.reload();
+}
+
 // Clear all markers
 document.getElementById("clear-all").addEventListener("click", () => {
   localStorage.removeItem("greenlandMarkers");
   location.reload();
 });
+
+// Add marker on click
+map.on("click", e => addMarker(e.latlng.lat, e.latlng.lng));
 </script>
 
 </body>
