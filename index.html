@@ -15,16 +15,6 @@
     form { margin: 0; }
     label { display: block; margin-top: 5px; }
     #clear-all { position: absolute; top: 10px; right: 10px; z-index: 1000; background: #ff4444; color: white; padding: 10px; border: none; cursor: pointer; }
-    
-    /* Style for marker label (airport name) */
-    .marker-label {
-      font-weight: bold;
-      background: white;
-      padding: 2px 5px;
-      border-radius: 5px;
-      border: 1px solid black;
-      font-size: 12px;
-    }
   </style>
 </head>
 <body>
@@ -43,16 +33,22 @@ L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
 
 // Correct airport locations (ICAO, latitude, longitude)
 const airportDatabase = {
-  "BGSF": { lat: 67.012, lng: -50.719 }, 
-  "BGGH": { lat: 64.190, lng: -51.678 }, 
-  "BGJN": { lat: 69.243, lng: -51.057 }, 
-  "BGBW": { lat: 61.160, lng: -45.426 }, 
-  "BGKK": { lat: 65.573, lng: -37.123 }, 
-  "BGTL": { lat: 76.531, lng: -68.703 }, 
-  "BGAA": { lat: 68.721, lng: -52.784 }, 
-  "BGSS": { lat: 66.951, lng: -53.729 }, 
-  "BGQQ": { lat: 77.489, lng: -69.332 }, 
-  "BGMV": { lat: 72.237, lng: -23.933 }
+  "BGSF": { lat: 67.012, lng: -50.719 }, // Kangerlussuaq
+  "BGGH": { lat: 64.190, lng: -51.678 }, // Nuuk
+  "BGJN": { lat: 69.243, lng: -51.057 }, // Ilulissat
+  "BGBW": { lat: 61.160, lng: -45.426 }, // Narsarsuaq
+  "BGKK": { lat: 65.573, lng: -37.123 }, // Kulusuk
+  "BGTL": { lat: 76.531, lng: -68.703 }, // Thule
+  "BGAA": { lat: 68.721, lng: -52.784 }, // Aasiaat
+  "BGSS": { lat: 66.951, lng: -53.729 }, // Sisimiut
+  "BGQQ": { lat: 77.489, lng: -69.332 }, // Qaanaaq
+  "BGMV": { lat: 72.237, lng: -23.933 }, // Mestersvig
+  "BGCO": { lat: 70.741, lng: -22.648 }, // Replace with correct coordinates if needed
+  "BGMQ": { lat: 65.412, lng: -52.939 }, // Replace with correct coordinates if needed
+  "BGUQ": { lat: 70.734, lng: -52.696 }, // Replace with correct coordinates if needed
+  "BGNO": { lat: 81.601, lng: -16.67  }, // Replace with correct coordinates if needed
+  "BGUK": { lat: 72.790, lng: -56.130 }, // Replace with correct coordinates if needed
+  "CYLT": { lat: 82.5178, lng: -62.2813 }  // Alert Airport, Nunavut, Canada
 };
 
 // Load saved markers from local storage
@@ -61,18 +57,11 @@ savedMarkers.forEach(markerData => {
   addMarker(markerData.lat, markerData.lng, markerData.name, markerData.icao, markerData.navaid);
 });
 
-// Function to add a marker with a name label and distance calculation
+// Function to add a marker with a popup form
 function addMarker(lat, lng, name = "", icao = "", navaid = "") {
   const marker = L.marker([lat, lng], { draggable: true }).addTo(map);
 
-  // Display airport name above marker
-  marker.bindTooltip(name || "Unnamed Airport", {
-    permanent: true,
-    direction: "top",
-    className: "marker-label"
-  }).openTooltip();
-
-  // Calculate distance if ICAO is in the database
+  // Determine status based on the ICAO code and its correct location
   let statusMessage = "";
   if (icao && airportDatabase[icao]) {
     const correctLocation = airportDatabase[icao];
@@ -82,11 +71,11 @@ function addMarker(lat, lng, name = "", icao = "", navaid = "") {
       `<span class="status" style="color:red;">❌ Wrong location (${distanceNM.toFixed(1)} NM away)</span>`;
   }
 
-  // Build a form inside the popup
+  // Build a form inside the popup. Pressing "Enter" in any field will submit the form.
   const formHTML = `
     <form onsubmit="handleSubmit(event, ${lat}, ${lng})">
       <label>Airport Name:</label>
-      <input type="text" class="popup-input name" value="${name}" oninput="updateMarkerLabel(${lat}, ${lng}, this.value)" />
+      <input type="text" class="popup-input name" value="${name}" />
       <label>ICAO Code:</label>
       <input type="text" class="popup-input icao" value="${icao}" oninput="updateAccuracy(${lat}, ${lng}, this.value, this.closest('form'))" />
       <label>NAVAID Info:</label>
@@ -98,21 +87,30 @@ function addMarker(lat, lng, name = "", icao = "", navaid = "") {
   `;
 
   marker.bindPopup(formHTML).openPopup();
-}
 
-// Function to update marker label dynamically
-function updateMarkerLabel(lat, lng, newName) {
-  map.eachLayer(layer => {
-    if (layer instanceof L.Marker) {
-      const position = layer.getLatLng();
-      if (position.lat === lat && position.lng === lng) {
-        layer.setTooltipContent(newName || "Unnamed Airport");
-      }
-    }
+  // Update popup content after dragging (to ensure the form stays in sync)
+  marker.on("dragend", function () {
+    marker.getPopup().setContent(formHTML);
   });
 }
 
-// Update distance when ICAO code changes
+// Called when the form is submitted (by pressing Enter or clicking Submit)
+function handleSubmit(e, lat, lng) {
+  e.preventDefault();
+  const form = e.target;
+  const name = form.querySelector(".name").value;
+  const icao = form.querySelector(".icao").value;
+  const navaid = form.querySelector(".navaid").value;
+  saveMarker(lat, lng, name, icao, navaid);
+
+  // Close the popup by accessing its marker source
+  const marker = form.closest('.leaflet-popup')._source;
+  if (marker) {
+    marker.closePopup();
+  }
+}
+
+// Update the accuracy message when the ICAO code changes
 function updateAccuracy(lat, lng, icao, formElement) {
   const accuracyDiv = formElement.querySelector(`#accuracy-${lat}-${lng}`);
   if (airportDatabase[icao]) {
@@ -126,25 +124,48 @@ function updateAccuracy(lat, lng, icao, formElement) {
   }
 }
 
-// Haversine formula to calculate distance (in NM)
+// Haversine formula to calculate distance (in nautical miles) between two points
 function calculateDistance(lat1, lon1, lat2, lon2) {
-  const R = 3440.1; 
+  const R = 3440.1; // Earth radius in nautical miles
   const toRad = deg => deg * (Math.PI / 180);
   const dLat = toRad(lat2 - lat1);
   const dLon = toRad(lon2 - lon1);
   const a = Math.sin(dLat / 2) ** 2 +
             Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
-  return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
 }
 
-// Click to add a marker
-map.on("click", e => addMarker(e.latlng.lat, e.latlng.lng));
+// Save the marker data to local storage
+function saveMarker(lat, lng, name, icao, navaid) {
+  let markers = JSON.parse(localStorage.getItem("greenlandMarkers")) || [];
+  // Remove any existing marker at the same coordinates
+  markers = markers.filter(m => m.lat !== lat || m.lng !== lng);
+  markers.push({ lat, lng, name, icao, navaid });
+  localStorage.setItem("greenlandMarkers", JSON.stringify(markers));
+}
 
-// Clear markers
-document.getElementById("clear-all").addEventListener("click", () => {
-  localStorage.removeItem("greenlandMarkers");
-  location.reload();
+// Remove marker data and refresh the map
+function removeMarker(lat, lng) {
+  let markers = JSON.parse(localStorage.getItem("greenlandMarkers")) || [];
+  markers = markers.filter(m => m.lat !== lat || m.lng !== lng);
+  localStorage.setItem("greenlandMarkers", JSON.stringify(markers));
+  location.reload(); // Refresh the page to remove the marker
+}
+
+// Clear all markers from the map and local storage
+function clearAllMarkers() {
+  localStorage.removeItem("greenlandMarkers"); // Clear local storage
+  location.reload(); // Refresh the page to remove all markers
+}
+
+// Add a marker when the map is clicked
+map.on("click", function (e) {
+  addMarker(e.latlng.lat, e.latlng.lng);
 });
+
+// Add event listener to the "Clear All Markers" button
+document.getElementById("clear-all").addEventListener("click", clearAllMarkers);
 </script>
 
 </body>
